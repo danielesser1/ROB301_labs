@@ -1,0 +1,134 @@
+#!/usr/bin/env python
+
+import argparse
+import rospy
+import math
+import PyKDL
+import time
+
+from geometry_msgs.msg import *
+from std_msgs.msg import Empty
+
+
+def call_back(msg):
+	rospy.loginfo('get call back')
+
+
+def PivotMove(x0,y0,theta0,x1,y1,theta1,spd,publisher):
+
+	l1 = math.sqrt((x1-x0)**2 + (y1-y0)**2)
+	thetapivot = math.atan2((y1-y0),(x1-x0))
+	print('First Pivot Angle: '+str(thetapivot-theta0))
+
+
+	twist = Twist()
+	twist.linear.x = 0
+	twist.angular.z = 1
+	publisher.publish(twist)
+	time.sleep((thetapivot-theta0))
+
+	twist = Twist()
+	twist.angular.z = 0
+	twist.linear.x = spd
+	publisher.publish(twist)
+	time.sleep(l1/spd)
+
+	twist = Twist()
+	twist.linear.x = 0
+	twist.angular.z = 1
+	publisher.publish(twist)
+	time.sleep((theta1-thetapivot))
+
+	twist = Twist()
+	twist.linear.x = 0
+	twist.angular.z = 0
+	publisher.publish(twist)
+		
+
+def ArcMove(radius, radians,spd,publisher):
+	
+	arcLength = radius*radians
+
+	try:
+		twist = Twist()
+        	twist.angular.z = spd
+		twist.linear.x = radius*spd
+		publisher.publish(twist)
+		time.sleep(radians)
+
+		twist = Twist()
+		twist.linear.x = 0
+        	twist.angular.z = 0
+		publisher.publish(twist)
+		
+	except rospy.ROSInterruptException:
+		pass
+	
+	
+def part1(publisher):
+	x0 = 0
+	y0 = 0
+	theta0 = 0
+	x1 = 1
+	y1 = .5
+	theta1 = 2.36 #rad
+	spd = .05
+	PivotMove(x0,y0,theta0,x1,y1,theta1,spd,publisher)
+
+def part2(publisher):
+	x0 = 0
+	y0 = 0
+	theta0 = 0
+	x1 = 1
+	y1 = 0
+	theta1 = math.pi/4
+	x2 = 1
+	y2 = 1
+	theta2 = math.pi/2
+	x3 = 0
+	y3 = 3
+	theta3 = 3*math.pi/4
+
+	spd = .05
+
+	PivotMove(x0,y0,theta0,x1,y1,theta1, spd, publisher)
+	PivotMove(x1,y1,theta1,x2,y2,theta2, spd, publisher)
+	PivotMove(x2,y2,theta2,x3,y3,theta3, spd, publisher)
+	PivotMove(x3,y3,theta3,x0,y0,theta0, spd, publisher)
+
+def part3(publisher):
+	ArcMove(.25,2.3*2*math.pi/360,.05, publisher)
+	PivotMove(0,0,0,1.8247,0,0,.05, publisher)
+	ArcMove(.25,132.7*2*math.pi/360,.05, publisher)
+
+def part4(publisher):
+	a = 50
+	b = 2*math.pi/50
+
+	try:
+		twist = Twist()
+		t0 = time.time()
+		while((time.time()-t0)<50):
+			curTime = time.time()
+        		twist.angular.z = -(a*(b*.01)**2*math.sin(b*curTime*.01))/((a*(b*.01)*math.cos(curTime*.01))**2+1 )
+			twist.linear.x = .01
+			publisher.publish(twist)
+			time.sleep(.01)
+		twist = Twist()
+		twist.linear.x = 0
+        	twist.angular.z = 0
+		self._cmd_pub.publish(twist)
+		
+	except rospy.ROSInterruptException:
+		pass
+	
+	
+
+if __name__ == '__main__':
+	rospy.init_node('rob301_lab2')
+	velocity_publisher = rospy.Publisher('cmd_vel', Twist, queue_size=10)
+	part1(velocity_publisher)
+	#part2(velocity_publisher)
+	#part3(velocity_publisher)
+	#part4(velocity_publisher)
+

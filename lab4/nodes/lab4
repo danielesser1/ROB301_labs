@@ -1,0 +1,112 @@
+#!/usr/bin/env python
+import rospy
+import time
+from sensor_msgs.msg import LaserScan
+from geometry_msgs.msg import Twist
+from std_msgs.msg import String
+
+import matplotlib.pyplot as plt
+import math
+import numpy as np
+
+
+class KalmanFilter(object):
+    def __init__(self, A = None, B = None, D = None, Q = None, R = None, P = None, x0 = None):
+
+        if(A is None or D is None):
+            raise ValueError("Set proper system dynamics.")
+
+        self.h = np.reshape(np.array([0.2]),(1,1)) #y
+        self.d = np.reshape(np.array([0.4]),(1,1)) #x
+
+        self.n = A.shape[1]
+        self.m = D.shape[1]
+
+        self.A = A
+        self.D = D
+        self.B = 0 if B is None else B
+        self.Q = np.eye(self.n) if Q is None else Q
+        self.R = np.eye(self.n) if R is None else R
+        self.P = np.eye(self.n) if P is None else P
+        self.x = np.zeros((self.n, 1)) if x0 is None else x0
+
+        self.scan_sub = rospy.Subscriber('scan_angle', String, self.scan_call_back, queue_size=1)
+        self.u = 0
+        self.phi = 0
+
+        self.measurements = []
+        self.measured_state = []
+        self.states = []
+
+
+        self.prev=time.time()
+
+    def predict(self, u = 0):
+        self.x = np.dot(self.A, self.x) + np.dot(self.B, u)
+        self.P = np.dot(np.dot(self.A, self.P), self.A.T) + self.Q
+        return self.x
+
+    def update(self, z):
+        self.D = self.h/(self.h**2 + (self.d - self.x)**2) #update the D for extended kalman filter
+        y = z - np.dot(self.D, self.x)
+        S = self.R + np.dot(self.D, np.dot(self.P, self.D.T))
+        K = np.dot(np.dot(self.P, self.D.T), np.linalg.inv(S))
+        self.x = self.x + np.dot(K, y)
+        I = np.eye(self.n)
+        self.P = np.dot(np.dot(I - np.dot(K, self.D), self.P),
+            (I - np.dot(K, self.D)).T) + np.dot(np.dot(K, self.R), K.T)
+
+
+    def scan_call_back(self, data):
+        self.phi = float(data.data)*math.pi/180
+        print("get the angle data from the lidar")
+
+
+    def run_kf(self,u):
+        #kf = KalmanFilter(A=A, B=B, D=D, Q=Q, R=R)
+        cur_measurement = self.phi
+        dt = np.reshape(np.array([time.time() - self.prev]),(1,1))
+        print('dt:{}'.format(dt))
+        self.B=dt
+        self.prev = time.time()
+
+        self.measurements.append(cur_measurement)
+        self.states.append(self.predict(u).flatten())
+        self.update(cur_measurement)
+        print("cur_pos:{}".format(self.x))
+	
+
+
+
+
+
+def main():
+    rospy.init_node('Lab4')
+    cmd_publisher=rospy.Publisher('cmd_vel', Twist, queue_size=1)
+    try:
+        h = np.reshape(np.array([0.2]),(1,1))
+        d = np.reshape(np.array([0.4]),(1,1))
+        #dt = np.reshape(np.array([0.1]),(1,1))
+        A = np.reshape(np.array([1]),(1,1))
+        B = 0
+        D = h/(h**2)        
+        #D = np.reshape(np.array([h/(d**2)]),(1,1))
+        Q = np.reshape(np.array([0.05]),(1,1)) #noise?
+        R = np.reshape(np.array([0.05]),(1,1)) #noise?
+        kf = KalmanFilter(A=A, B=B, D=D, Q=Q, R=R)
+        while(1):
+            twist=Twist()
+            if kf.x >= 1:
+                twist.linear.x=0
+                cmd_publisher.publish(twist)
+
+            twist.linear.x=0.05
+            cmd_publisher.publish(twist)
+            kf.run_kf(0.05)        
+    except rospy.ROSInterruptException:
+        pass
+
+if __name__ == '__main__':
+    main()
+
+

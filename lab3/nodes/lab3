@@ -1,0 +1,175 @@
+#!/usr/bin/env python
+
+import rospy
+import math
+import time
+from sensor_msgs.msg import LaserScan
+from geometry_msgs.msg import Twist
+from std_msgs.msg import String
+import numpy as np
+
+class PID(object):
+	def __init__(self, p_gain, i_gain, d_gain, i_min, i_max):
+		"""Constructor, zeros out Pid values when created and
+		initialize Pid-gains and integral term limits.
+
+		Parameters:
+		  p_gain     The proportional gain.
+          i_gain     The integral gain.
+          d_gain     The derivative gain.
+          i_min      The integral lower limit. 
+          i_max      The integral upper limit.
+        """
+		self._p_gain = p_gain
+		self._i_gain = i_gain
+		self._d_gain = d_gain
+		self._i_min = i_min
+		self._i_max= i_max
+		self.reset()
+
+	def reset(self):
+		self._p_error_last = 0.0 # Save position state for derivative
+                                 # state calculation.
+		self._p_error = 0.0 # Position error.
+		self._d_error = 0.0 # Derivative error.
+		self._i_error = 0.0 # Integator error.
+		self._cmd = 0.0 # Command to send.
+		self._last_time = None # Used for automatic calculation of dt.
+        
+
+	def update_PID(self, p_error, dt=None):
+		if dt is None:
+			cur_time = time.time()
+			if self._last_time is None: 
+				self._last_time = cur_time
+			dt = cur_time - self._last_time
+			self._last_time = cur_time
+
+		self._p_error = p_error
+		if dt == 0 or math.isnan(dt) or math.isinf(dt):
+			print("dt:{}".format(dt))
+			return 0.0
+
+		p_term = self._p_gain * self._p_error
+		print("p_gain:{}, p_error:{}, p_term:{}".format(self._p_gain, self._p_error, p_term))
+
+		self._i_error += dt* self._p_error
+		i_term = self._i_gain * self._i_error
+
+		# Limit i_term so that the limit is meaningful in the output
+		if i_term > self._i_max and self._i_gain != 0:
+			i_term = self._i_max
+			self._i_error = i_term / self._i_gain
+		elif i_term < self._i_min and self._i_gain != 0:
+			i_term = self._i_min
+			self._i_error = i_term / self._i_gain
+
+		print("i_error:{}, i_gain:{}, p_error:{}, dt:{}, i_term:{}".format(self._i_error, self._i_gain, self._p_error, dt, i_term))
+
+		# Calculate the derivative error
+		self._d_error = (self._p_error - self._p_error_last) / dt
+		self._p_error_last = self._p_error
+        
+		# Calculate derivative contribution to command 
+		d_term = self._d_gain * self._d_error
+        
+		print("p_error:{}, p_error_last:{}, dt:{}, d_error:{}, d_gain:{}, d_term:{}".format(self._p_error, self._p_error_last, dt, self._d_error, self._d_gain, d_term))
+		self._cmd = p_term + i_term + d_term
+		
+		print("cmd:{}".format(self._cmd))
+		return self._cmd
+
+
+class PIDcontrol():
+    def __init__(self):
+	self.p_gain = 0.1
+	self.i_gain = 0.0
+	self.d_gain = 0.001
+	self.interval_max = 0.02
+	self.interval_min = -0.02
+
+        self._cmd_pub = rospy.Publisher('cmd_vel', Twist, queue_size=1)
+        self.controller = PID(0.18, 0.0002, 0.002, -0.02, 0.02)
+        self.color_sub = rospy.Subscriber('color_mono', String, self.camera_callback, queue_size=1)
+        rospy.spin()
+    
+    '''
+    def get_scan(self, upper = True):
+        scan = rospy.wait_for_message('scan', LaserScan)
+        scan_filter = []
+       
+        samples = len(scan.ranges)  # The number of samples is defined in 
+                                    # turtlebot3_<model>.gazebo.xacro file,
+                                    # the default is 360.
+        samples_view = 1            # 1 <= samples_view <= samples
+
+        #print("value at 0 degrees:{}".format(scan.ranges[0]))
+        #print("value at 90 degrees:{}".format(scan.ranges[90]))
+        #print("value at 270 degrees:{}".format(scan.ranges[270]))
+        
+        if samples_view > samples:
+            samples_view = samples
+
+        if samples_view is 1:
+            #scan_filter.append(scan.ranges[0])
+            filtered = []
+            #if upper:
+            #    for i in range(45, 90):
+            #        if scan.ranges[i] != 0:
+            #            filtered.append(scan.ranges[i])
+            #else:
+            #    for i in range(90, 135):
+            #        if scan.ranges[i] != 0:
+            #            filtered.append(scan.ranges[i])
+            for i in range(45, 135):
+                    if scan.ranges[i] != 0:
+                        filtered.append(scan.ranges[i])
+            scan_filter.append(min(filtered))
+
+        else:
+            left_lidar_samples_ranges = -(samples_view//2 + samples_view % 2)
+            right_lidar_samples_ranges = samples_view//2
+            
+            left_lidar_samples = scan.ranges[left_lidar_samples_ranges:]
+            right_lidar_samples = scan.ranges[:right_lidar_samples_ranges]
+            scan_filter.extend(left_lidar_samples + right_lidar_samples)
+
+        for i in range(samples_view):
+            if scan_filter[i] == float('Inf'):
+                scan_filter[i] = 3.5        
+        return scan_filter
+    '''
+
+
+    def camera_callback(self, data):
+        index = int(data.data)
+        mid = 320
+	print('index:{}'.format(index))
+        error = -(index - mid)/200
+        self.follow_the_line(error)
+
+    def follow_the_line(self, error):
+        cmd = self.controller.update_PID(error)
+	print('cmd:{} error:{}'.format(cmd, error))
+	twist = Twist()
+        twist.linear.x = 0.03
+        twist.angular.z = cmd
+        if cmd < 0:
+            print('turning right')
+        else:
+            print('turning left')
+        self._cmd_pub.publish(twist)
+
+
+
+def main():
+    rospy.init_node('Lab3')
+    try:
+        PID = PIDcontrol()
+    except rospy.ROSInterruptException:
+        pass
+
+if __name__ == '__main__':
+    main()
+
+
