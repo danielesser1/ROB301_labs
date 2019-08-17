@@ -30,11 +30,19 @@ def get_scan():
             else:
                 scan_filter.append(val)
 
-	closest = []
-	for i in range(10):
-		ind = np.argmin(scan_filter)
-		closest.append(ind)
-		scan_filter[ind] = 100
+
+        in_range = np.array(scan_filter[0:180]) #take left half of scan
+        angles = np.where(in_range <=1)
+#        print(angles)
+        median_angle = np.median(angles) +3
+        print(median_angle)
+    #old method
+#	for i in range(10):
+#		ind = np.argmin(scan_filter)
+#		closest.append(ind)
+#		scan_filter[ind] = 100
+        
+        
 	#print(np.mean(closest))
         
 	#derivative = [0]
@@ -46,7 +54,9 @@ def get_scan():
         #edge_2 = np.argmax(derivative)
 	#print(edge_1, edge_2)
         #print((edge_1 + edge_2)/2)
-    	return np.mean(closest)
+        
+        
+    	return median_angle
 
 def main():
     rospy.init_node('get_scan_angle')
