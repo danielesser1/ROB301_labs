@@ -61,6 +61,10 @@ class KalmanFilter(object):
 
         self.prev= rospy.Time.now().to_sec()
 
+        self.cmd_sub = rospy.Subscriber('cmd_vel', Twist, self.cmd_callback)
+        self.state_pub = rospy.Publisher('state', String, queue_size = 1)
+        self.u=0
+
     def predict(self, u = 0):
         self.x = np.dot(self.A, self.x) + np.dot(self.B, u)
         self.P = np.dot(np.dot(self.A, self.P), self.A.T) + self.Q
@@ -84,8 +88,8 @@ class KalmanFilter(object):
         print("get the angle data from the lidar")
 
 
-    def run_kf(self,u):
-        #kf = KalmanFilter(A=A, B=B, D=D, Q=Q, R=R)
+    def run_kf(self):
+        u = self.u
         cur_measurement = self.phi
         dt = np.reshape(np.array([rospy.Time.now().to_sec() - self.prev]),(1,1))
         self.prev = rospy.Time.now().to_sec()
@@ -100,10 +104,10 @@ class KalmanFilter(object):
             self.update(cur_measurement)
         self.P_history.append(self.P.squeeze())
         print("cur_pos:{}".format(self.x))
+        self.state_pub.publish(str(self.x))
 	
-
-
-
+    def cmd_callback(self, cmd_msg):
+        self.u = cmd_msg.linear.x
 
 
 if __name__=="__main__":
@@ -111,29 +115,23 @@ if __name__=="__main__":
         settings = termios.tcgetattr(sys.stdin)
         
     rospy.init_node('Lab4')
-    cmd_publisher=rospy.Publisher('cmd_vel', Twist, queue_size=1)
-    
+    #cmd_publisher=rospy.Publisher('cmd_vel', Twist, queue_size=1)
     try:
         h = 0.6
         d = 0.6
-        #dt = np.reshape(np.array([0.1]),(1,1))
         A = np.reshape(np.array([1]),(1,1))
         B = 0
         D = h/(h**2)        
-        #D = np.reshape(np.array([h/(d**2)]),(1,1))
         Q = np.reshape(np.array([0.001]),(1,1)) #noise?
         R = np.reshape(np.array([0.001]),(1,1)) #noise?
         kf = KalmanFilter(A=A, B=B, D=D, Q=Q, R=R, h=h, d=d)
         while(1):
             key = getKey()
-            twist=Twist()
-#            if kf.x >= 1:
-#                twist.linear.x=0
-#                cmd_publisher.publish(twist)
+            #twist=Twist()
 
-            twist.linear.x=0.05
-            cmd_publisher.publish(twist)
-            kf.run_kf(0.05)  
+            #twist.linear.x=0.05
+            #cmd_publisher.publish(twist)
+            kf.run_kf()  
 
             if (key == '\x03') or kf.x >=1.22:
                 break

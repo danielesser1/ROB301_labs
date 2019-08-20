@@ -7,6 +7,25 @@ from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
 from std_msgs.msg import String
 import numpy as np
+import sys, select, os
+if os.name == 'nt':
+    import msvcrt
+else:
+    import tty, termios
+
+def getKey():
+    if os.name == 'nt':
+      return msvcrt.getch()
+
+    tty.setraw(sys.stdin.fileno())
+    rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
+    if rlist:
+        key = sys.stdin.read(1)
+    else:
+        key = ''
+
+    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
+    return key
 
 class PID(object):
 	def __init__(self, p_gain, i_gain, d_gain, i_min, i_max):
@@ -88,71 +107,36 @@ class PIDcontrol():
 	self.interval_max = 0.02
 	self.interval_min = -0.02
 
-        self._cmd_pub = rospy.Publisher('cmd_vel', Twist, queue_size=1)
-        self.controller = PID(0.18, 0.0002, 0.002, -0.02, 0.02)
-        self.color_sub = rospy.Subscriber('color_mono', String, self.camera_callback, queue_size=1)
-        rospy.spin()
-    
-    '''
-    def get_scan(self, upper = True):
-        scan = rospy.wait_for_message('scan', LaserScan)
-        scan_filter = []
-       
-        samples = len(scan.ranges)  # The number of samples is defined in 
-                                    # turtlebot3_<model>.gazebo.xacro file,
-                                    # the default is 360.
-        samples_view = 1            # 1 <= samples_view <= samples
+    self._cmd_pub = rospy.Publisher('cmd_vel', Twist, queue_size=1)
+    self.controller = PID(0.18, 0.0002, 0.002, -0.02, 0.02)
+    self.color_sub = rospy.Subscriber('color_mono', String, self.camera_callback, queue_size=1)
 
-        #print("value at 0 degrees:{}".format(scan.ranges[0]))
-        #print("value at 90 degrees:{}".format(scan.ranges[90]))
-        #print("value at 270 degrees:{}".format(scan.ranges[270]))
-        
-        if samples_view > samples:
-            samples_view = samples
-
-        if samples_view is 1:
-            #scan_filter.append(scan.ranges[0])
-            filtered = []
-            #if upper:
-            #    for i in range(45, 90):
-            #        if scan.ranges[i] != 0:
-            #            filtered.append(scan.ranges[i])
-            #else:
-            #    for i in range(90, 135):
-            #        if scan.ranges[i] != 0:
-            #            filtered.append(scan.ranges[i])
-            for i in range(45, 135):
-                    if scan.ranges[i] != 0:
-                        filtered.append(scan.ranges[i])
-            scan_filter.append(min(filtered))
-
-        else:
-            left_lidar_samples_ranges = -(samples_view//2 + samples_view % 2)
-            right_lidar_samples_ranges = samples_view//2
-            
-            left_lidar_samples = scan.ranges[left_lidar_samples_ranges:]
-            right_lidar_samples = scan.ranges[:right_lidar_samples_ranges]
-            scan_filter.extend(left_lidar_samples + right_lidar_samples)
-
-        for i in range(samples_view):
-            if scan_filter[i] == float('Inf'):
-                scan_filter[i] = 3.5        
-        return scan_filter
-    '''
+    self.state_sub = rospy.Subscriber('state', String, self.state_callback)
+    self.goal = 1.22
+    self.stop = False
+    self.error = 0
+    rospy.spin()
 
 
     def camera_callback(self, data):
         index = int(data.data)
         mid = 320
-	print('index:{}'.format(index))
+        print('index:{}'.format(index))
         error = -(index - mid)/200
-        self.follow_the_line(error)
+        self.error = error
 
-    def follow_the_line(self, error):
+    def state_callback(self, data):
+        state = float(data)
+        if state >= self.goal:
+            self.stop=True
+
+
+    def follow_the_line(self):
+        error = self.error
         cmd = self.controller.update_PID(error)
-	print('cmd:{} error:{}'.format(cmd, error))
-	twist = Twist()
-        twist.linear.x = 0.03
+        print('cmd:{} error:{}'.format(cmd, error))
+        twist = Twist()
+        twist.linear.x = 0.05
         twist.angular.z = cmd
         if cmd < 0:
             print('turning right')
@@ -164,10 +148,21 @@ class PIDcontrol():
 
 def main():
     rospy.init_node('Lab3')
+    PID = PIDcontrol()
     try:
-        PID = PIDcontrol()
+        while(1):
+            key = getKey()
+            PID.follow_the_line()
+            if (key == '\x03') or PID.stop:
+                break
     except rospy.ROSInterruptException:
-        pass
+        print("comm failed")
+
+    finally:
+        twist = Twist()
+        twist.linear.x = 0.0; twist.linear.y = 0.0; twist.linear.z = 0.0
+        twist.angular.x = 0.0; twist.angular.y = 0.0; twist.angular.z = 0.0
+        PID._cmd_pub.publish(twist)
 
 if __name__ == '__main__':
     main()
