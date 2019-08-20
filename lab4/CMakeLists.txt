@@ -75,7 +75,7 @@ include_directories(
 # Install
 ################################################################################
 catkin_install_python(PROGRAMS 
-  nodes/lab4
+  nodes/lab4.py
   nodes/get_scan_angle.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

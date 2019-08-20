@@ -46,7 +46,7 @@ class KalmanFilter(object):
         self.B = 0 if B is None else B
         self.Q = np.eye(self.n) if Q is None else Q
         self.R = np.eye(self.n) if R is None else R
-        self.P = np.eye(self.n) if P is None else P
+        self.P = 0.01*np.eye(self.n) if P is None else P
         self.x = np.zeros((self.n, 1)) if x0 is None else x0
 
         self.scan_sub = rospy.Subscriber('scan_angle', String, self.scan_call_back, queue_size=1)
@@ -56,6 +56,7 @@ class KalmanFilter(object):
         self.measurements = []
         self.measured_state = []
         self.states = []
+        self.P_history = []
 
 
         self.prev= rospy.Time.now().to_sec()
@@ -88,13 +89,16 @@ class KalmanFilter(object):
         cur_measurement = self.phi
         dt = np.reshape(np.array([rospy.Time.now().to_sec() - self.prev]),(1,1))
         self.prev = rospy.Time.now().to_sec()
-        print('dt:{}'.format(dt))
+#        print('dt:{}'.format(dt))
         self.B=dt
         
 
         self.measurements.append(cur_measurement)
         self.states.append(self.predict(u).flatten())
-        self.update(cur_measurement)
+        if math.isnan(cur_measurement) != True:
+            print('measurement received')
+            self.update(cur_measurement)
+        self.P_history.append(self.P.squeeze())
         print("cur_pos:{}".format(self.x))
 	
 
@@ -131,12 +135,16 @@ if __name__=="__main__":
             cmd_publisher.publish(twist)
             kf.run_kf(0.05)  
 
-            if (key == '\x03') or kf.x >=0.61:
+            if (key == '\x03') or kf.x >=1.22:
                 break
     except:
         print(e)
 
     finally:
+        print(kf.P_history)
+        print(len(kf.P_history))
+        plt.plot(np.array(kf.P_history))
+        plt.savefig('covariance.png')
         twist = Twist()
         twist.linear.x = 0.0; twist.linear.y = 0.0; twist.linear.z = 0.0
         twist.angular.x = 0.0; twist.angular.y = 0.0; twist.angular.z = 0.0

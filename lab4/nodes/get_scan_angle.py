@@ -31,9 +31,14 @@ def get_scan():
                 scan_filter.append(val)
 
 
-        in_range = np.array(scan_filter[0:180]) #take left half of scan
-        angles = np.where(in_range <=1)
-#        print(angles)
+        in_range = np.array(scan_filter[0:180]) #only use ~1/4 of the scan in the direction of the beam
+        angles = np.array(range(0,180))*np.pi/180
+        y_range = np.copy(in_range)*np.sin(np.copy(angles))
+#        print(x_range)
+        
+        angles = np.where(np.logical_and(in_range <=1,y_range>=0.5))
+#        y_range = y_range[np.where(np.logical_and(in_range <=1,y_range>=0.45))]
+#        print(x_range)
         median_angle = np.median(angles) +3
         print(median_angle)
     #old method
