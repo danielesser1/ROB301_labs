@@ -51,7 +51,7 @@ class KalmanFilter(object):
 
         self.scan_sub = rospy.Subscriber('scan_angle', String, self.scan_call_back, queue_size=1)
         self.u = 0
-        self.phi = 0
+        self.phi = np.nan
 
         self.measurements = []
         self.measured_state = []
@@ -62,15 +62,16 @@ class KalmanFilter(object):
         self.prev= rospy.Time.now().to_sec()
 
     def predict(self, u = 0):
-        self.x = np.dot(self.A, self.x) + np.dot(self.B, u)
+        self.x = np.dot(self.A, self.x) + np.dot(self.B, u) + np.random.normal(-0.0005,0.001)
         self.P = np.dot(np.dot(self.A, self.P), self.A.T) + self.Q
         return self.x
 
     def update(self, z):
         self.D = self.h/(self.h**2 + (self.d - self.x)**2) #update the D for extended kalman filter
         measurement = np.arctan(self.h/(self.d-self.x))
-        if measurement < 0:
-            measurement = np.pi - measurement
+        if measurement <= 0:
+            measurement = np.pi + measurement
+        self.measurements.append(measurement)
         y = z - measurement
         S = self.R + np.dot(self.D, np.dot(self.P, self.D.T))
         K = np.dot(np.dot(self.P, self.D.T), np.linalg.inv(S))
@@ -145,6 +146,9 @@ if __name__=="__main__":
         print(len(kf.P_history))
         plt.plot(np.array(kf.P_history))
         plt.savefig('covariance.png')
+        plt.figure()
+        plt.plot(np.array(kf.measurements))
+        plt.savefig('measurement.png')
         twist = Twist()
         twist.linear.x = 0.0; twist.linear.y = 0.0; twist.linear.z = 0.0
         twist.angular.x = 0.0; twist.angular.y = 0.0; twist.angular.z = 0.0
@@ -152,5 +156,3 @@ if __name__=="__main__":
 
 if __name__ == '__main__':
     main()
-
-

@@ -36,7 +36,7 @@ def get_scan():
         y_range = np.copy(in_range)*np.sin(np.copy(angles))
 #        print(x_range)
         
-        angles = np.where(np.logical_and(in_range <=1,y_range>=0.5))
+        angles = np.where(np.logical_and(in_range <=1.2,y_range>=0.5))
 #        y_range = y_range[np.where(np.logical_and(in_range <=1,y_range>=0.45))]
 #        print(x_range)
         median_angle = np.median(angles) +3
