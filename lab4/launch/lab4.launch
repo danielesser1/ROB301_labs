@@ -1,4 +1,8 @@
 <launch>
-  <node pkg="lab4" type="lab4" name="lab4" output="screen">
-  </node>
+  <node pkg="lab4" type="lab4.py" name="lab4" output="screen">
+  	</node>
+  <node pkg="lab3" type="lab3" name="lab3" output="screen">
+  	</node>
+  <node pkg="camera" type="camera" name="camera" output="screen">
+  	</node>
 </launch>
